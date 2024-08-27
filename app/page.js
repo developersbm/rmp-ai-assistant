@@ -1,110 +1,111 @@
 'use client'
-import React, { useState } from 'react';
-import { Box, Stack, TextField, Button } from '@mui/material';
+import { useState, useRef, useEffect } from 'react';
 
 export default function Home() {
   const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: `Hi! I'm the Rate My Professor support assistant. How can I help you today?`,
-    },
-  ])
-  const [message, setMessage] = useState('')
+    { role: 'assistant', content: "Hi! This is an AI that interacts as Rate My Professor! Please let me know about what professor you need more information!" },
+  ]);
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   const sendMessage = async () => {
-    setMessage('')
+    if (!message.trim() || isLoading) return;
+    setIsLoading(true);
+    const userMessage = message;
+    setMessage('');
     setMessages((messages) => [
-      ...messages,
-      {role: 'user', content: message},
-      {role: 'assistant', content: ''},
-    ])
-  
-    const response = fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify([...messages, {role: 'user', content: message}]),
-    }).then(async (res) => {
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let result = ''
-  
-      return reader.read().then(function processText({done, value}) {
-        if (done) {
-          return result
+        ...messages,
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: '' },
+    ]);
+
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: userMessage }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
         }
-        const text = decoder.decode(value || new Uint8Array(), {stream: true})
+
+        const data = await response.json();
         setMessages((messages) => {
-          let lastMessage = messages[messages.length - 1]
-          let otherMessages = messages.slice(0, messages.length - 1)
-          return [
-            ...otherMessages,
-            {...lastMessage, content: lastMessage.content + text},
-          ]
-        })
-        return reader.read().then(processText)
-      })
-    })
-  }
+            let lastMessage = messages[messages.length - 1];
+            let otherMessages = messages.slice(0, messages.length - 1);
+            return [
+                ...otherMessages,
+                { ...lastMessage, content: data.message },
+            ];
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        setMessages((messages) => [
+            ...messages,
+            { role: 'assistant', content: "I'm sorry, but I encountered an error. Please try again later." },
+        ]);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const handleKeyPress = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  };
+
   return (
-    <Box
-      width="100vw"
-      height="100vh"
-      display="flex"
-      flexDirection="column"
-      justifyContent="center"
-      alignItems="center"
-    >
-      <Stack
-        direction={'column'}
-        width="500px"
-        height="700px"
-        border="1px solid black"
-        p={2}
-        spacing={3}
-      >
-        <Stack
-          direction={'column'}
-          spacing={2}
-          flexGrow={1}
-          overflow="auto"
-          maxHeight="100%"
-        >
-          {messages.map((message, index) => (
-            <Box
+    <div className="w-screen h-screen flex flex-col justify-center items-center bg-gradient-to-r from-indigo-900 via-purple-900 to-pink-900 text-white">
+      <div className="flex flex-col w-[500px] h-[700px] border border-gray-700 shadow-xl bg-opacity-70 bg-gray-800 p-4 space-y-4 rounded-lg backdrop-blur-md">
+        <div className="flex flex-col space-y-4 flex-grow overflow-auto">
+          {messages.map((msg, index) => (
+            <div
               key={index}
-              display="flex"
-              justifyContent={
-                message.role === 'assistant' ? 'flex-start' : 'flex-end'
-              }
+              className={`flex ${msg.role === 'assistant' ? 'justify-start' : 'justify-end'}`}
             >
-              <Box
-                bgcolor={
-                  message.role === 'assistant'
-                    ? 'primary.main'
-                    : 'secondary.main'
-                }
-                color="white"
-                borderRadius={16}
-                p={3}
+              <div
+                className={`${
+                  msg.role === 'assistant' ? 'bg-gradient-to-r from-blue-500 to-green-500' : 'bg-gradient-to-r from-green-400 to-teal-500'
+                } text-white rounded-lg p-4 max-w-[80%] shadow-lg`}
               >
-                {message.content}
-              </Box>
-            </Box>
+                {msg.content}
+              </div>
+            </div>
           ))}
-        </Stack>
-        <Stack direction={'row'} spacing={2}>
-          <TextField
-            label="Message"
-            fullWidth
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="flex space-x-4">
+          <input
+            type="text"
+            placeholder="Type a message..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            className="w-full p-2 bg-gray-700 text-white rounded-lg outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
           />
-          <Button variant="contained" onClick={sendMessage}>
+          <button
+            onClick={sendMessage}
+            disabled={isLoading}
+            className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-lg transform transition-transform duration-300 hover:scale-105 shadow-lg"
+          >
             Send
-          </Button>
-        </Stack>
-      </Stack>
-    </Box>
-  )
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
